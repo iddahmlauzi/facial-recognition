@@ -7,7 +7,7 @@ AES-128 IMPLEMENTATION FOR MORE SECURITY
 
 Security overview:
 
-- The random salt ensures the same message will map to different ciphertexts.
+- The random salt ensures the same image data will map to different ciphertexts.
 
 - The HMAC ensures the integrity of both the entire ciphertext and the PKBDF2
   salt; encrypt-then-mac prevents attacks like Padding Oracle.
