@@ -1,64 +1,80 @@
 {% extends "base.html" %}
 
-{% block title %} - Backend {% endblock %}
+{% block title %}Backend{% endblock %}
 
 {% block body %}
 <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
 <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,400,700&display=swap" rel="stylesheet">
+
+
 <style>
   body {
+    
+  background-image: url('face.jpg');
+  background-size: cover; /* Cover the entire viewport */
+  background-repeat: no-repeat; /* Do not repeat the image */
+  background-position: center; /* Center the image in the page */
+ /* backdrop-filter: blur(5px);*/
     font-family: 'Open Sans', sans-serif;
     background-color: #f8f9fa;
     margin-top: 20px;
   }
   .header {
-    background-color: #007bff;
+    background-color: #0056b3;
     color: white;
-    padding: 10px 0;
-    border-radius: 3px;
-    margin-bottom: 30px;
+    padding: 20px 0;
+    border-radius: 5px;
+    margin-bottom: 40px;
+    box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
   }
   .header h2 {
     text-align: center;
+    margin: 0;
+    font-size: 1.75rem;
   }
   .form-group label {
     font-weight: bold;
   }
   .btn-primary {
-    background-color: #007bff;
+    background-color: #0056b3;
     border: none;
+    padding: 10px 20px;
+    transition: background-color 0.3s ease;
   }
   .btn-primary:hover {
-    background-color: #0056b3;
+    background-color: #003d82;
   }
   .flashes {
-    padding: 10px;
-    border: 1px solid #007bff;
-    border-radius: 3px;
-    margin-bottom: 20px;
+    padding: 15px;
+    border: 1px solid #0056b3;
+    border-radius: 5px;
+    margin-bottom: 25px;
+    background-color: #e9ecef;
   }
   .registered-users {
     background-color: #fff;
     border: 1px solid #dee2e6;
-    border-radius: 3px;
-    padding: 20px;
+    border-radius: 5px;
+    padding: 25px;
+    box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
   }
   .registered-users h4 {
-    margin-bottom: 20px;
+    margin-bottom: 25px;
+    font-size: 1.5rem;
   }
   .registered-users ul {
     list-style-type: none;
     padding-left: 0;
   }
   .registered-users li {
-    padding: 5px 0;
+    padding: 10px 0;
     border-bottom: 1px solid #dee2e6;
   }
 </style>
 
 <div class="container">
   <div class="header">
-    <h2>HIT 400: FACIAL RECOGNITION BASED ACCESS CONTROL SYSTEM</h2>
+    <h2>HIT 400: Facial Recognition Based Access Control System</h2>
   </div>
   <div class="row">
     <div class="col-md-6">
@@ -74,13 +90,14 @@
       
       <form method="post" enctype='multipart/form-data'>
         <div class="form-group">
-          <label for="usernameInput">Input Username</label>
-          <input name="username" type="text" class="form-control" id="usernameInput">
+          <label for="usernameInput">Username</label>
+          <input name="username" type="text" class="form-control" id="usernameInput" placeholder="Enter username">
         </div>
         <div class="form-group">
-          <label for="fileInput">Input User Image</label>
+          <label for="fileInput">User Image</label>
           <input name="image" type="file" class="form-control-file" id="fileInput">
-          <button type="submit" class="btn btn-primary">Register User</button>
+        </div>
+        <button type="submit" class="btn btn-primary">Register User</button>
       </form>
     </div>
     
@@ -96,6 +113,7 @@
     </div>
   </div>
 </div>
+
 
 <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
