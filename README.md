@@ -1,5 +1,8 @@
-This is an exercise in secure symmetric-key encryption, implemented in pure
-Python (only built-in libraries used), expanded from Bo Zhu's (http://about.bozhu.me)
+THIS PROGRAM WAS DEVELOPED FOR MY HIT400 PROJECT, IT USES: 
+PYTHON
+OPENCV
+face_recognition module 
+aes encrytion 
 AES-128 implementation at https://github.com/bozhu/AES-Python
 
 ```python
