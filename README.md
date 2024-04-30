@@ -4,7 +4,7 @@ OPENCV
 face_recognition module 
 AES-128 IMPLEMENTATION FOR MORE SECURITY  
 
-# Facial Recognition System
+# Facial Recognition Based Access Control System (HIT400)
 
 Welcome to the Facial Recognition Based Access Control System project! This repository contains a robust and efficient solution for facial recognition tasks, leveraging state-of-the-art machine learning algorithms and techniques.
 
