@@ -1,10 +1,13 @@
 from pathlib import Path
 import pickle
 import asyncio
+import face_recognition
 from io import BytesIO
 from typing import Any
-
+import os
+from cryptography.fernet import Fernet
 from werkzeug.datastructures import FileStorage
+import numpy as np
 
 class PickleStorage():
 	""" Caches data to disk as a pickle for quickly reading/writing/storing small chunks of
@@ -109,19 +112,79 @@ class UserStorage(PickleStorage):
 
 	default_id = "user_storage.dat"
 	default_value = {}
+	key_file = 'encryption.key'
+	iv_file = 'encryption.iv'
+	
+	def __init__(self, *args, **kwargs):
+		super().__init__(*args, **kwargs)
+		self.load_keys()
+	
+	def load_keys(self):
+		# Check if key and IV exist
+		if os.path.exists(self.key_file) and os.path.exists(self.iv_file): 
+			with open(self.key_file, 'rb') as keyfile:
+				encryption_key = keyfile.read()
+			with open(self.iv_file, 'rb') as ivfile:
+				self.iv = ivfile.read()
+		else:
+			# Generate and save new key and IV
+			encryption_key = Fernet.generate_key()
+			self.iv = os.urandom(16)  # Adjust size according to your encryption algorithm
+			with open(self.key_file, 'wb') as keyfile:
+				keyfile.write(encryption_key)
+			with open(self.iv_file, 'wb') as ivfile:
+				ivfile.write(self.iv)
+		
+		self.fernet = Fernet(encryption_key)
 
+	async def add_user(self, username: str, io_stream: BytesIO, *args, **kwargs) -> None:
+			user_dir = self.get_relative_path(f"known_users/{username}")
+			user_dir.mkdir(exist_ok=True, parents=True)
+			img_path = user_dir.joinpath("img.jpg")
 
-	async def add_user(self, username: str, io_stream:BytesIO, *args, **kwargs) -> None:
-		user_dir = self.get_relative_path(f"known_users/{username}")
-		user_dir.mkdir(exist_ok=True, parents=True)
-		img_path = user_dir.joinpath("img.jpg")
+			# Write the image file
+			with img_path.open("wb") as write_file:
+				io_stream.seek(0)
+				write_file.write(io_stream.read())
+			
+			# Load image to create encoding
+			user_image = face_recognition.load_image_file(str(img_path))
+			user_image_encoding = face_recognition.face_encodings(user_image)
+			if user_image_encoding:
+				user_image_encoding = user_image_encoding[0]  # assuming one face per image for simplicity
+				# Encrypt the face encoding
+				encrypted_encoding = self.fernet.encrypt(user_image_encoding.tobytes())
+				encoding_path = user_dir.joinpath("encoding.dat")
+				with encoding_path.open("wb") as encoding_file:
+					encoding_file.write(encrypted_encoding)
+				encoding_path_str = str(encoding_path)
+			else:
+				encoding_path_str = None
 
-		with img_path.open("wb") as write_file:
-			write_file.write(io_stream.read())
+			# Store details in pickle
+			store = await self.read()
+			store[username] = {
+				'img_path': str(img_path),
+				'encoding_path': encoding_path_str
+			}
+			await self.write(store)
 
+	async def get_user_encoding(self, username: str) -> np.ndarray:
 		store = await self.read()
-		store[username] = str(img_path)
-		await self.write(store)
+		user_info = store.get(username)
+		if not user_info or 'encoding_path' not in user_info:
+			return None
+		
+		encoding_path = Path(user_info['encoding_path'])
+		if not encoding_path.exists():
+			return None
+		
+		with encoding_path.open('rb') as file:
+			encrypted_encoding = file.read()
+		
+		decrypted_encoding = self.fernet.decrypt(encrypted_encoding)
+		face_encoding = np.frombuffer(decrypted_encoding, dtype=np.float64)
+		return face_encoding
 
 
 	async def get_user_image(self, username: str, *args, **kwargs) -> bytes:
@@ -138,4 +201,5 @@ class UserStorage(PickleStorage):
 
 	async def list_users(self, *args, **kwargs):
 		store = await self.read()
-		return list([ (k,v) for k, v in store.items()])
+		return [(k, v['img_path'], v['encoding_path']) for k, v in store.items() if 'encoding_path' in v]
+

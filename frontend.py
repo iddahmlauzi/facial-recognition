@@ -8,90 +8,95 @@ import os
 import hashlib
 import unittest
 from aes import AES, encrypt, decrypt
+from cryptography.fernet import Fernet
 
 
 logger = logging.getLogger()
 
 class WebcamReader:
-    
-    def _init_(self, *args, **kwargs):
-        self.cap = cv.VideoCapture(0)
-        self.frame_skip = 5
-        self.access_denied_images_path = "denied_access_images"
-        self.encryption_key = os.urandom(32)  # AES-256 key
-        self.iv = os.urandom(16)  # Initialization vector
-        self.aes_instance = AES(self.encryption_key)  # Create an instance of the AES class
-        if not self.cap.isOpened():
-            logging.warning("Failed to open camera. Is an active webcam present?")
-        if not os.path.exists(self.access_denied_images_path):
-            os.makedirs(self.access_denied_images_path)
+	
+	def __init__(self, *args, **kwargs):
+		self.cap = cv.VideoCapture(0)
+		self.frame_skip = 5
+		self.access_denied_images_path = "denied_access_images"
+		self.user_storage = UserStorage()
+		if not self.cap.isOpened():
+			logging.warning("Failed to open camera. Is an active webcam present?")
+		if not os.path.exists(self.access_denied_images_path):
+			os.makedirs(self.access_denied_images_path)
 
-    async def get_known_encodings(self, *args, **kwargs):
-        user_storage = UserStorage()
-        user_list = await user_storage.list_users()
-        known_face_encodings = []
-        known_face_names = []
+	async def get_known_encodings(self):
+		user_list = await self.user_storage.list_users()
+		print(user_list)
+		known_face_encodings = []
+		known_face_names = []
 
-        for user_info in user_list:
-            try:
-                user_image = face_recognition.load_image_file(user_info[1])
-                user_image_encoding = face_recognition.face_encodings(user_image)[0]
-                known_face_names.append(user_info[0])
-                # Encrypt the face encoding before storing it
-                encrypted_encoding = self.aes_instance.encrypt(user_image_encoding.tobytes(), self.iv)
-                # Decrypt the face encoding and reshape it back to (128,)
-                decrypted_encoding = self.aes_instance.decrypt(encrypted_encoding, self.iv)
-                face_encoding = np.frombuffer(decrypted_encoding, dtype=np.float64).reshape(-1)
-                known_face_encodings.append(face_encoding)
-            except UnidentifiedImageError:
-                logging.warning(f"Failed to determine face_encoding for: {user_info[1]}")
-                continue
+		for username, _, _ in user_list:
+			face_encoding = await self.user_storage.get_user_encoding(username)
+			if face_encoding is not None:
+				known_face_names.append(username)
+				known_face_encodings.append(face_encoding)
+			else:
+				logger.warning(f"Failed to retrieve or decode face encoding for {username}")
 
-        return known_face_names, known_face_encodings
+		return known_face_names, known_face_encodings
 
 
-    async def read_webcam(self, *args, **kwargs):
-        known_face_names, known_face_encodings = await self.get_known_encodings()
-        frame_count = 0
-        recognition_threshold = 0.6  # Set the threshold for face recognition
+	async def read_webcam(self, *args, **kwargs):
+		known_face_names, known_face_encodings = await self.get_known_encodings()
 
-        while True:
-            ret, frame = self.cap.read()
-            frame_count += 1
+		while True:
+			ret, frame = self.cap.read()
+			if not ret:
+				continue
 
-            # Skip frames to reduce lag
-            if frame_count % self.frame_skip != 0:
-                continue
+			# Resize the frame to reduce resolution and speed up face processing
+			small_frame = cv.resize(frame, (0, 0), fx=0.5, fy=0.5)
 
-            rgb_frame = frame[:, :, ::-1]
-            face_locations = face_recognition.face_locations(rgb_frame)
-            face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
+			# Convert the image from BGR color (which OpenCV uses)
+			# to RGB color (which face_recognition uses)
+			rgb_small_frame = np.ascontiguousarray(small_frame[:, :, ::-1])
 
-            for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
-                matches = face_recognition.compare_faces(known_face_encodings, face_encoding)
-                face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
-                best_match_index = np.argmin(face_distances)
-                access_granted = face_distances[best_match_index] < recognition_threshold
+			# Find all the faces and face encodings in the resized frame
+			face_locations = face_recognition.face_locations(rgb_small_frame)
+			face_encodings = face_recognition.face_encodings(rgb_small_frame, face_locations)
 
-                name = known_face_names[best_match_index] if access_granted else "Unknown"
 
-                # Draw a box around the face and show pop-up message
-                box_color = (0, 255, 0) if access_granted else (0, 0, 255)
-                cv.rectangle(frame, (left, top), (right, bottom), box_color, 2)
-                font = cv.FONT_HERSHEY_DUPLEX
-                cv.putText(frame, name, (left + 6, bottom - 6), font, 1.0, (255, 255, 255), 1)
+			# EDIT: # Set a new threshold for face comparison
+			threshold = 0.5  # Lower value makes the comparison stricter
 
-                # If access is denied, save the image and show a pop-up
-                if not access_granted:
-                    timestamp = hashlib.sha256(str(top + right + bottom + left).encode()).hexdigest()
-                    denied_image_path = os.path.join(self.access_denied_images_path, f"{timestamp}.png")
-                    cv.imwrite(denied_image_path, frame[top:bottom, left:right])
-                    cv.imshow('Access Denied', frame[top:bottom, left:right])
+			# Loop through each face in this frame of video
+			for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
+				# Scale face locations back up to the original frame size
+				top *= 2; right *= 2; bottom *= 2; left *= 2
 
-            cv.imshow('Video', frame)
+				# Compare the face encoding to known face encodings
+				matches = face_recognition.compare_faces(known_face_encodings, face_encoding, tolerance=0.5)
+				name = "Unknown"
+				# EDIT: add access denied message 
+				access_message = "Access Denied"
 
-            if cv.waitKey(1) & 0xFF == ord('q'):
-                break
+				# If a match was found in known_face_encodings, just use the first one.
+				if any(matches):
+					first_match_index = matches.index(True)
+					name = known_face_names[first_match_index]
+					access_message = "Access Granted"
 
-        self.cap.release()
-        cv.destroyAllWindows()
+				# Draw a box around the face
+				cv.rectangle(frame, (left, top), (right, bottom), (0, 255, 0) if access_message == "Access Granted" else (255, 0, 0), 2)
+
+				# Draw a label with a name and access message below the face
+				cv.rectangle(frame, (left, bottom - 35), (right, bottom), (0, 255, 0) if access_message == "Access Granted" else (255, 0, 0), cv.FILLED)
+				font = cv.FONT_HERSHEY_DUPLEX
+				cv.putText(frame, f"{name}: {access_message}", (left + 6, bottom - 6), font, 0.6, (255, 255, 255), 1)
+
+			# Display the resulting frame
+			cv.imshow('Video', frame)
+
+			# Break the loop if 'q' is pressed
+			if cv.waitKey(1) & 0xFF == ord('q'):
+				break
+
+		# Release the webcam and destroy all OpenCV windows
+		self.cap.release()
+		cv.destroyAllWindows()
